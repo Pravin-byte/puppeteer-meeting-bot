@@ -3,10 +3,25 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
+
+// Dynamically find the installed Chrome binary
+function getChromePath() {
+  const basePath = '/opt/render/.cache/puppeteer/chrome';
+  const findCmd = `find ${basePath} -type f -name "chrome" | head -n 1`;
+  try {
+    const path = execSync(findCmd).toString().trim();
+    console.log('✅ Chrome executable found at:', path);
+    return path;
+  } catch (err) {
+    console.error('❌ Failed to locate Chrome:', err.message);
+    return null;
+  }
+}
 
 app.post('/join-meeting', async (req, res) => {
   const { link, token } = req.body;
@@ -19,12 +34,8 @@ app.post('/join-meeting', async (req, res) => {
     return res.status(400).json({ error: 'Invalid or missing meeting link' });
   }
 
-  const chromePath = '/opt/render/.cache/puppeteer/chrome/linux-138.0.7204.92/chrome-linux64/chrome';
-
-  if (!fs.existsSync(chromePath)) {
-    console.error('❌ Chrome binary not found at:', chromePath);
-    return res.status(500).json({ error: 'Chrome binary not found on server.' });
-  }
+  const chromePath = getChromePath();
+  if (!chromePath) return res.status(500).json({ error: 'Chrome binary not found on server.' });
 
   let browser;
   try {
@@ -56,7 +67,6 @@ app.post('/join-meeting', async (req, res) => {
 
     const stayDuration = parseInt(process.env.STAY_DURATION || '60000');
     await page.waitForTimeout(stayDuration);
-
     await browser.close();
 
     return res.json({
