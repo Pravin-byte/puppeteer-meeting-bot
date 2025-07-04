@@ -6,18 +6,34 @@ require('dotenv').config();
 
 app.use(express.json());
 
+const path = require('path');
+
 app.post('/join-meeting', async (req, res) => {
   const { link, token } = req.body;
 
-  if (token !== process.env.SECRET) return res.status(403).json({ error: 'Unauthorized' });
-  if (!link || !link.startsWith('http')) return res.status(400).json({ error: 'Invalid or missing meeting link' });
+  if (token !== process.env.SECRET) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  if (!link || !link.startsWith('http')) {
+    return res.status(400).json({ error: 'Invalid or missing meeting link' });
+  }
+
+  const chromePath = path.join(
+    '/opt/render/.cache/puppeteer/chrome',
+    'linux-138.0.7204.92',
+    'chrome-linux64',
+    'chrome'
+  );
 
   let browser;
   try {
     browser = await puppeteer.launch({
       headless: true,
+      executablePath: chromePath,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
+
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 720 });
 
@@ -40,8 +56,15 @@ app.post('/join-meeting', async (req, res) => {
 
     const stayDuration = parseInt(process.env.STAY_DURATION || '60000');
     await page.waitForTimeout(stayDuration);
+
     await browser.close();
-    return res.json({ status: 'joined', platform, timestamp: new Date().toISOString() });
+
+    return res.json({
+      status: 'joined',
+      platform,
+      timestamp: new Date().toISOString()
+    });
+
   } catch (err) {
     if (browser) await browser.close();
     console.error('❌ Error:', err.message);
