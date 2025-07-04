@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const puppeteer = require('puppeteer');
 const path = require('path');
@@ -9,28 +8,37 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
+// Ensure Chrome is installed at runtime in /tmp
+async function ensureChrome() {
+  const chromePath = '/tmp/chrome/chrome-linux64/chrome';
+  if (fs.existsSync(chromePath)) return chromePath;
+
+  console.log('⬇️ Downloading Chrome at runtime...');
+  execSync('npx puppeteer browsers install chrome', {
+    env: { ...process.env, PUPPETEER_CACHE_DIR: '/tmp/chrome' },
+    stdio: 'inherit',
+  });
+
+  if (!fs.existsSync(chromePath)) {
+    throw new Error('Chrome installation failed.');
+  }
+  return chromePath;
+}
 
 app.post('/join-meeting', async (req, res) => {
   const { link, token } = req.body;
 
-  if (token !== process.env.SECRET) {
-    return res.status(403).json({ error: 'Unauthorized' });
-  }
-
-  if (!link || !link.startsWith('http')) {
-    return res.status(400).json({ error: 'Invalid or missing meeting link' });
-  }
-
-  const chromePath = '/opt/render/.cache/puppeteer/chrome/linux-138.0.7204.92/chrome-linux64/chrome';
-  
-  if (!chromePath) return res.status(500).json({ error: 'Chrome binary not found on server.' });
+  if (token !== process.env.SECRET) return res.status(403).json({ error: 'Unauthorized' });
+  if (!link || !link.startsWith('http')) return res.status(400).json({ error: 'Invalid or missing meeting link' });
 
   let browser;
   try {
+    const chromePath = await ensureChrome();
+
     browser = await puppeteer.launch({
       headless: true,
       executablePath: chromePath,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
     const page = await browser.newPage();
@@ -39,29 +47,18 @@ app.post('/join-meeting', async (req, res) => {
     const platform = detectPlatform(link);
     console.log(`🔍 Detected platform: ${platform}`);
 
-    if (platform === 'Google Meet') {
-      await joinGoogleMeet(page, link);
-    } else if (platform === 'Zoom') {
-      await joinZoom(page, link);
-    } else if (platform === 'Jitsi') {
-      await joinJitsi(page, link);
-    } else if (platform === 'Microsoft Teams') {
-      await joinTeams(page, link);
-    } else if (platform === 'Webex') {
-      await joinWebex(page, link);
-    } else {
-      throw new Error(`Platform ${platform} not supported yet.`);
-    }
+    if (platform === 'Google Meet') await joinGoogleMeet(page, link);
+    else if (platform === 'Zoom') await joinZoom(page, link);
+    else if (platform === 'Jitsi') await joinJitsi(page, link);
+    else if (platform === 'Microsoft Teams') await joinTeams(page, link);
+    else if (platform === 'Webex') await joinWebex(page, link);
+    else throw new Error(`Platform ${platform} not supported yet.`);
 
     const stayDuration = parseInt(process.env.STAY_DURATION || '60000');
     await page.waitForTimeout(stayDuration);
     await browser.close();
 
-    return res.json({
-      status: 'joined',
-      platform,
-      timestamp: new Date().toISOString()
-    });
+    return res.json({ status: 'joined', platform, timestamp: new Date().toISOString() });
   } catch (err) {
     if (browser) await browser.close();
     console.error('❌ Error:', err.message);
@@ -166,5 +163,5 @@ async function joinWebex(page, link) {
   }
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`🚀 Puppeteer bot server listening on port ${PORT}`));
