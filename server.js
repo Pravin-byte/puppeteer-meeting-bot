@@ -8,10 +8,14 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-// Ensure Chrome is installed at runtime in /tmp
 async function ensureChrome() {
-  const chromePath = '/tmp/chrome/chrome-linux64/chrome';
-  if (fs.existsSync(chromePath)) return chromePath;
+  const version = '138.0.7204.92'; // Puppeteer installs this version by default
+  const chromePath = path.join('/tmp/chrome/chrome', `linux-${version}`, 'chrome-linux64', 'chrome');
+
+  if (fs.existsSync(chromePath)) {
+    console.log('✅ Chrome already installed.');
+    return chromePath;
+  }
 
   console.log('⬇️ Downloading Chrome at runtime...');
   execSync('npx puppeteer browsers install chrome', {
@@ -20,11 +24,11 @@ async function ensureChrome() {
   });
 
   if (!fs.existsSync(chromePath)) {
-    throw new Error('Chrome installation failed.');
+    throw new Error('❌ Chrome installation failed.');
   }
+
   return chromePath;
 }
-
 app.post('/join-meeting', async (req, res) => {
   const { link, token } = req.body;
 
