@@ -1,12 +1,12 @@
 // server.js
 const express = require('express');
 const puppeteer = require('puppeteer');
-const app = express();
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
+const app = express();
 app.use(express.json());
-
-const path = require('path');
 
 app.post('/join-meeting', async (req, res) => {
   const { link, token } = req.body;
@@ -19,12 +19,12 @@ app.post('/join-meeting', async (req, res) => {
     return res.status(400).json({ error: 'Invalid or missing meeting link' });
   }
 
-  const chromePath = path.join(
-    '/opt/render/.cache/puppeteer/chrome',
-    'linux-138.0.7204.92',
-    'chrome-linux64',
-    'chrome'
-  );
+  const chromePath = '/opt/render/.cache/puppeteer/chrome/linux-138.0.7204.92/chrome-linux64/chrome';
+
+  if (!fs.existsSync(chromePath)) {
+    console.error('❌ Chrome binary not found at:', chromePath);
+    return res.status(500).json({ error: 'Chrome binary not found on server.' });
+  }
 
   let browser;
   try {
@@ -64,7 +64,6 @@ app.post('/join-meeting', async (req, res) => {
       platform,
       timestamp: new Date().toISOString()
     });
-
   } catch (err) {
     if (browser) await browser.close();
     console.error('❌ Error:', err.message);
