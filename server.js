@@ -12,16 +12,18 @@ app.use(express.json());
 // Dynamically find the installed Chrome binary
 function getChromePath() {
   const basePath = '/opt/render/.cache/puppeteer/chrome';
-  const findCmd = `find ${basePath} -type f -name "chrome" | head -n 1`;
+  const findCmd = `find ${basePath} -type f -name chrome -perm -111 | head -n 1`;
   try {
     const path = execSync(findCmd).toString().trim();
+    if (!path) throw new Error('Chrome binary path is empty');
     console.log('✅ Chrome executable found at:', path);
     return path;
   } catch (err) {
-    console.error('❌ Failed to locate Chrome:', err.message);
+    console.error('❌ Failed to locate Chrome binary:', err.message);
     return null;
   }
 }
+
 
 app.post('/join-meeting', async (req, res) => {
   const { link, token } = req.body;
