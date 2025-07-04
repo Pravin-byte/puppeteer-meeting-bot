@@ -1,0 +1,13 @@
+{
+  "name": "puppeteer-meeting-bot",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.0.1",
+    "express": "^5.1.0",
+    "puppeteer": "^24.11.2"
+  }
+}
