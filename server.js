@@ -9,21 +9,6 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-// Dynamically find the installed Chrome binary
-function getChromePath() {
-  const basePath = '/opt/render/.cache/puppeteer/chrome';
-  const findCmd = `find ${basePath} -type f -name chrome -perm -111 | head -n 1`;
-  try {
-    const path = execSync(findCmd).toString().trim();
-    if (!path) throw new Error('Chrome binary path is empty');
-    console.log('✅ Chrome executable found at:', path);
-    return path;
-  } catch (err) {
-    console.error('❌ Failed to locate Chrome binary:', err.message);
-    return null;
-  }
-}
-
 
 app.post('/join-meeting', async (req, res) => {
   const { link, token } = req.body;
@@ -36,7 +21,8 @@ app.post('/join-meeting', async (req, res) => {
     return res.status(400).json({ error: 'Invalid or missing meeting link' });
   }
 
-  const chromePath = getChromePath();
+  const chromePath = '/opt/render/.cache/puppeteer/chrome/linux-138.0.7204.92/chrome-linux64/chrome';
+  
   if (!chromePath) return res.status(500).json({ error: 'Chrome binary not found on server.' });
 
   let browser;
