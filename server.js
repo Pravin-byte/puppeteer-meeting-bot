@@ -80,7 +80,7 @@ app.post('/join-meeting', async (req, res) => {
       status: 'joined',
       platform,
       date: new Date().toISOString(),
-      link
+      classLink : link
     });
   } catch (err) {
     if (browser) await browser.close();
