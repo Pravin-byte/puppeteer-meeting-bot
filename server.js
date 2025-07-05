@@ -8,8 +8,9 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
+// Dynamically install Chrome at runtime if not available
 async function ensureChrome() {
-  const version = '138.0.7204.92'; // Puppeteer installs this version by default
+  const version = '138.0.7204.92';
   const chromePath = path.join('/tmp/chrome/chrome', `linux-${version}`, 'chrome-linux64', 'chrome');
 
   if (fs.existsSync(chromePath)) {
@@ -29,11 +30,17 @@ async function ensureChrome() {
 
   return chromePath;
 }
+
 app.post('/join-meeting', async (req, res) => {
   const { link, token } = req.body;
 
-  if (token !== process.env.SECRET) return res.status(403).json({ error: 'Unauthorized' });
-  if (!link || !link.startsWith('http')) return res.status(400).json({ error: 'Invalid or missing meeting link' });
+  if (token !== process.env.SECRET) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  if (!link || !link.startsWith('http')) {
+    return res.status(400).json({ error: 'Invalid or missing meeting link' });
+  }
 
   let browser;
   try {
@@ -42,7 +49,7 @@ app.post('/join-meeting', async (req, res) => {
     browser = await puppeteer.launch({
       headless: true,
       executablePath: chromePath,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
     const page = await browser.newPage();
@@ -51,18 +58,29 @@ app.post('/join-meeting', async (req, res) => {
     const platform = detectPlatform(link);
     console.log(`🔍 Detected platform: ${platform}`);
 
-    if (platform === 'Google Meet') await joinGoogleMeet(page, link);
-    else if (platform === 'Zoom') await joinZoom(page, link);
-    else if (platform === 'Jitsi') await joinJitsi(page, link);
-    else if (platform === 'Microsoft Teams') await joinTeams(page, link);
-    else if (platform === 'Webex') await joinWebex(page, link);
-    else throw new Error(`Platform ${platform} not supported yet.`);
+    if (platform === 'Google Meet') {
+      await joinGoogleMeet(page, link);
+    } else if (platform === 'Zoom') {
+      await joinZoom(page, link);
+    } else if (platform === 'Jitsi') {
+      await joinJitsi(page, link);
+    } else if (platform === 'Microsoft Teams') {
+      await joinTeams(page, link);
+    } else if (platform === 'Webex') {
+      await joinWebex(page, link);
+    } else {
+      throw new Error(`Platform ${platform} not supported yet.`);
+    }
 
     const stayDuration = parseInt(process.env.STAY_DURATION || '60000');
-    await page.waitForTimeout(stayDuration);
-    await browser.close();
+    await new Promise(resolve => setTimeout(resolve, stayDuration)); // Fix: waitForTimeout deprecated
 
-    return res.json({ status: 'joined', platform, timestamp: new Date().toISOString() });
+    await browser.close();
+    return res.json({
+      status: 'joined',
+      platform,
+      timestamp: new Date().toISOString()
+    });
   } catch (err) {
     if (browser) await browser.close();
     console.error('❌ Error:', err.message);
@@ -82,16 +100,19 @@ function detectPlatform(link) {
 async function joinGoogleMeet(page, link) {
   console.log('🔗 Joining Google Meet...');
   await page.goto(link, { waitUntil: 'networkidle2' });
+  console.log('📍 Landed on:', page.url());
 
   if (process.env.GMAIL && process.env.GPASSWORD) {
     try {
-      await page.waitForSelector('input[type="email"]', { timeout: 8000 });
+      await page.waitForSelector('input[type="email"]', { timeout: 15000 });
       await page.type('input[type="email"]', process.env.GMAIL);
       await page.click('#identifierNext');
       await page.waitForTimeout(3000);
-      await page.waitForSelector('input[type="password"]', { timeout: 8000 });
+
+      await page.waitForSelector('input[type="password"]', { timeout: 15000 });
       await page.type('input[type="password"]', process.env.GPASSWORD);
       await page.click('#passwordNext');
+
       await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
       console.log('✅ Logged in to Google');
     } catch (e) {
@@ -111,11 +132,11 @@ async function joinGoogleMeet(page, link) {
 async function joinZoom(page, link) {
   console.log('🔗 Joining Zoom...');
   await page.goto(link, { waitUntil: 'networkidle2' });
-  await page.waitForTimeout(4000);
+  await new Promise(resolve => setTimeout(resolve, 4000));
   const joinFromBrowser = await page.$('a[href*="/wc/join/"]');
   if (joinFromBrowser) {
     await joinFromBrowser.click();
-    await page.waitForTimeout(3000);
+    await new Promise(resolve => setTimeout(resolve, 3000));
     const input = await page.$('input#inputname');
     if (input) await input.type('PuppeteerBot');
     const joinBtn = await page.$('button[type="submit"]');
@@ -129,7 +150,7 @@ async function joinZoom(page, link) {
 async function joinJitsi(page, link) {
   console.log('🔗 Joining Jitsi...');
   await page.goto(link, { waitUntil: 'networkidle2' });
-  await page.waitForTimeout(2000);
+  await new Promise(resolve => setTimeout(resolve, 2000));
   console.log('✅ Joined Jitsi Meet');
 }
 
