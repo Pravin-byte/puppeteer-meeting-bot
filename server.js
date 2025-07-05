@@ -74,7 +74,8 @@ app.post('/join-meeting', async (req, res) => {
     return res.json({
       status: joined ? 'joined' : 'failed',
       platform,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      classLink:link
     });
   } catch (err) {
     if (browser) await browser.close();
