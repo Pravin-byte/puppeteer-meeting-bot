@@ -9,9 +9,15 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
+// Dynamically install Chrome at runtime if not available
 async function ensureChrome() {
-  const chromePath = '/tmp/chrome/chrome-linux64/chrome';
-  if (fs.existsSync(chromePath)) return chromePath;
+  const version = '138.0.7204.92';
+  const chromePath = path.join('/tmp/chrome/chrome', `linux-${version}`, 'chrome-linux64', 'chrome');
+
+  if (fs.existsSync(chromePath)) {
+    console.log('✅ Chrome already installed.');
+    return chromePath;
+  }
 
   console.log('⬇️ Downloading Chrome at runtime...');
   execSync('npx puppeteer browsers install chrome', {
@@ -20,8 +26,9 @@ async function ensureChrome() {
   });
 
   if (!fs.existsSync(chromePath)) {
-    throw new Error('Chrome installation failed.');
+    throw new Error('❌ Chrome installation failed.');
   }
+
   return chromePath;
 }
 
@@ -39,7 +46,6 @@ app.post('/join-meeting', async (req, res) => {
   let browser;
   try {
     const chromePath = await ensureChrome();
-
     browser = await puppeteer.launch({
       headless: true,
       executablePath: chromePath,
@@ -52,30 +58,31 @@ app.post('/join-meeting', async (req, res) => {
     const platform = detectPlatform(link);
     console.log(`🔍 Detected platform: ${platform}`);
 
-    let joined = false;
     if (platform === 'Google Meet') {
-      joined = await joinGoogleMeet(page, link);
+      await joinGoogleMeet(page, link);
     } else if (platform === 'Zoom') {
-      joined = await joinZoom(page, link);
+      await joinZoom(page, link);
     } else if (platform === 'Jitsi') {
-      joined = await joinJitsi(page, link);
+      await joinJitsi(page, link);
     } else if (platform === 'Microsoft Teams') {
-      joined = await joinTeams(page, link);
+      await joinTeams(page, link);
     } else if (platform === 'Webex') {
-      joined = await joinWebex(page, link);
+      await joinWebex(page, link);
     } else {
       throw new Error(`Platform ${platform} not supported yet.`);
     }
 
     const stayDuration = parseInt(process.env.STAY_DURATION || '60000');
-    await page.waitForTimeout(stayDuration);
+    await new Promise(resolve => setTimeout(resolve, stayDuration));
+
     await browser.close();
 
     return res.json({
-      status: joined ? 'joined' : 'failed',
+      status: 'joined',
       platform,
-      timestamp: new Date().toISOString(),
-      classLink:link
+      date: new Date().toISOString(),
+      link,
+      classLink: link
     });
   } catch (err) {
     if (browser) await browser.close();
@@ -103,65 +110,50 @@ async function joinGoogleMeet(page, link) {
       await page.waitForSelector('input[type="email"]', { timeout: 15000 });
       await page.type('input[type="email"]', process.env.GMAIL);
       await page.click('#identifierNext');
-      await page.waitForTimeout(3000);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
       await page.waitForSelector('input[type="password"]', { timeout: 15000 });
       await page.type('input[type="password"]', process.env.GPASSWORD);
       await page.click('#passwordNext');
-      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 });
+      await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
       console.log('✅ Logged in to Google');
     } catch (e) {
       console.warn('⚠️ Google login skipped or failed:', e.message);
     }
   }
 
-  try {
-    await page.waitForSelector('div[role="button"]', { timeout: 15000 });
-    await page.evaluate(() => {
-      const buttons = [...document.querySelectorAll('div[role="button"]')];
-      const joinBtn = buttons.find(btn => btn.innerText && btn.innerText.toLowerCase().includes('join'));
-      if (joinBtn) joinBtn.click();
-    });
-    console.log('✅ Clicked Join Button');
-  } catch (e) {
-    console.warn('⚠️ Could not click Join:', e.message);
-  }
-
-  try {
-    await page.waitForSelector('button[aria-label*="Leave call"]', { timeout: 15000 });
-    console.log('✅ Join confirmed (in meeting)');
-    return true;
-  } catch (e) {
-    console.warn('⚠️ Could not confirm join:', e.message);
-    return false;
-  }
+  await page.waitForSelector('div[role="button"]', { timeout: 15000 });
+  await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll('div[role="button"]')];
+    const joinBtn = buttons.find(btn => btn.innerText && btn.innerText.toLowerCase().includes('join'));
+    if (joinBtn) joinBtn.click();
+  });
+  console.log('✅ Joined Google Meet');
 }
 
 async function joinZoom(page, link) {
   console.log('🔗 Joining Zoom...');
   await page.goto(link, { waitUntil: 'networkidle2' });
-  await page.waitForTimeout(4000);
+  await new Promise(resolve => setTimeout(resolve, 4000));
   const joinFromBrowser = await page.$('a[href*="/wc/join/"]');
   if (joinFromBrowser) {
     await joinFromBrowser.click();
-    await page.waitForTimeout(3000);
+    await new Promise(resolve => setTimeout(resolve, 3000));
     const input = await page.$('input#inputname');
     if (input) await input.type('PuppeteerBot');
     const joinBtn = await page.$('button[type="submit"]');
     if (joinBtn) await joinBtn.click();
     console.log('✅ Joined Zoom from browser');
-    return true;
   } else {
     console.warn('⚠️ Zoom: "Join from browser" link not found');
-    return false;
   }
 }
 
 async function joinJitsi(page, link) {
   console.log('🔗 Joining Jitsi...');
   await page.goto(link, { waitUntil: 'networkidle2' });
-  await page.waitForTimeout(2000);
+  await new Promise(resolve => setTimeout(resolve, 2000));
   console.log('✅ Joined Jitsi Meet');
-  return true;
 }
 
 async function joinTeams(page, link) {
@@ -175,10 +167,9 @@ async function joinTeams(page, link) {
     await page.type('input#username', 'PuppeteerBot');
     await page.click('button[type="submit"]');
     console.log('✅ Joined Teams meeting');
-    return true;
   } catch (e) {
     console.error('❌ Teams join failed:', e.message);
-    return false;
+    throw e;
   }
 }
 
@@ -190,12 +181,11 @@ async function joinWebex(page, link) {
     await page.type('input[name="guestName"]', 'PuppeteerBot');
     await page.click('button.joinMeeting');
     console.log('✅ Joined Webex meeting');
-    return true;
   } catch (e) {
     console.error('❌ Webex join failed:', e.message);
-    return false;
+    throw e;
   }
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`🚀 Puppeteer bot server listening on port ${PORT}`));
